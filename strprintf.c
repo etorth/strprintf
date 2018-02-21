@@ -17,10 +17,9 @@
  */
 
 #include <stdio.h>
-#include <stdarg.h>
 #include <stdlib.h>
 #include "strprintf.h"
-int __strvprintf(void (*fnConsume)(const char *), const char *szFormat, va_list ap)
+int __strvprintf(void (*fnConsume)(const char *, int, void *), void *pArg, const char *szFormat, va_list ap)
 {
     int nRet = -1;
 
@@ -33,23 +32,24 @@ int __strvprintf(void (*fnConsume)(const char *), const char *szFormat, va_list 
     // 1. try static buffer
     //    give an enough size so we can hopefully stop here
     {
-        char szSBuf[2048];
+        char szSBuf[512];
         nRet = vsnprintf(szSBuf, sizeof(szSBuf), szFormat, ap_static);
 
         if(nRet >= 0){
-            if((size_t)(nRet + 1) < sizeof(szSBuf)){
+            if((size_t)(nRet) < sizeof(szSBuf)){
                 if(fnConsume){
-                    fnConsume(szSBuf);
+                    fnConsume(szSBuf, nRet, pArg);
                 }
                 va_end(ap_static);
                 return nRet;
             }else{
                 // do nothing
                 // have to try the dynamic buffer method
+                va_end(ap_static);
             }
         }else{
             if(fnConsume){
-                fnConsume(NULL);
+                fnConsume(NULL, -1, pArg);
             }
             va_end(ap_static);
             return -1;
@@ -59,7 +59,7 @@ int __strvprintf(void (*fnConsume)(const char *), const char *szFormat, va_list 
     // 2. try dynamic buffer
     //    use the parsed buffer size above to get enough memory
 
-    int nDLen = nRet + 1 + 64;
+    int nDLen = nRet + 64;
     while(1){
         char *szDBuf = (char *)(malloc(nDLen));
         if(szDBuf){
@@ -70,31 +70,33 @@ int __strvprintf(void (*fnConsume)(const char *), const char *szFormat, va_list 
             va_end(ap_dynamic);
 
             if(nRet >= 0){
-                if((size_t)(nRet + 1) < nDLen){
+                if(nRet < nDLen){
                     if(fnConsume){
-                        fnConsume(szDBuf);
+                        fnConsume(szDBuf, nRet, pArg);
                     }
                     free(szDBuf);
                     return nRet;
                 }else{
-                    nDLen = nDLen * 2 + 1 + 64;
+                    nDLen = nDLen * 2 + 64;
                 }
             }else{
                 if(fnConsume){
-                    fnConsume(NULL);
+                    fnConsume(NULL, -1, pArg);
                 }
                 free(szDBuf);
                 return -1;
             }
         }else{
+
+            // get memroy failed
+            // we can try more time here
+
             if(fnConsume){
-                fnConsume(NULL);
+                fnConsume(NULL, -2, pArg);
             }
             return -2;
         }
     }
 
-    // would never be here
-    // to make the compiler happy
     return -3;
 }

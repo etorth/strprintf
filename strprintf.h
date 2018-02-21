@@ -90,6 +90,8 @@
 #ifndef __STR_PRINTF_H__
 #define __STR_PRINTF_H__
 
+#include <stdarg.h>
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -98,13 +100,42 @@ extern "C"
 // function takes printf-format argument with customized consume handler
 // arguments:
 //      fnConsume   : consume the parsed c string, provide nullptr if parse failed
+//                    sample funComsume looks like
+//                          void fnConsume(const char *szInfo, int nLen, void *pArg)
+//                          {
+//                              // szInfo : full c string after parsing
+//                              // nLen   : >= 0: return by std::vsnprintf(), string length
+//                              //          <  0: error code
+//                              // pArg   : callback argument
+//
+//                              if(pArg){
+//                                  if(nLen >= 0){
+//                                      *((std::string *)(pArg)) = szInfo;
+//                                  }else{
+//                                      *((std::string *)(pArg)) = "Parssing error";
+//                                  }
+//                              }
+//                          }
 //      szFormat    : format
 // return value:
 //                  : >= 0  : return value from std::vsnprintf()
 //                  :   -1  : parsing error
 //                      -2  : internal buffer error
 //                    other : unknown error
-int __strprintf(void(*)(const char *), const char *, ...);
+int __strvprintf(void(*)(const char *, int, void *), void *, const char *, va_list);
+
+// usage of __strvprintf
+// catch varidic argument instead of va_list
+inline int __strprintf(void(*fnConsume)(const char *, int, void *), void *pArg, const char *szFormat, ...)
+{
+    va_list ap;
+    va_start(ap, szFormat);
+
+    int nRet = __strvprintf(fnConsume, pArg, szFormat, ap);
+
+    va_end(ap);
+    return nRet;
+}
 
 #ifdef __cplusplus
 }
